@@ -1,0 +1,6 @@
+destination_id: cabb2219f11cd6cc772f767a152d35b8
+destination_type: RUN
+source_id: cabb2219f11cd6cc772f767a152d35b8
+source_type: DATASET
+tags:
+  mlflow.data.context: training

@@ -1,13 +1,12 @@
 {
   "name": "A2-PREDICTION-CAR-PRICE",
   "dockerComposeFile": "../docker-compose.yaml",
-  "service": "dev",
+  "service": "jupyter",
   "workspaceFolder": "/root/code",
   "extensions": ["ms-python.python", "ms-toolsai.jupyter"],
   "settings": {
-    "python.pythonPath": "/usr/local/bin/python",
     "terminal.integrated.shell.linux": "/bin/bash"
   },
-  "forwardPorts": [9999, 5000],
+  "forwardPorts": [8888, 8050, 5001],
   "remoteUser": "root"
 }

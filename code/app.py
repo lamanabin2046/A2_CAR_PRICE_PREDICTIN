@@ -1,168 +1,222 @@
 # app.py
 import dash
-from dash import Dash, html, dcc, callback, Input, Output, State
+from dash import Dash, html, dcc, Input, Output, State
 import dash_bootstrap_components as dbc
 import pandas as pd
 import numpy as np
+import pickle
 import plotly.express as px
+from Regression import Normal  # your regression class
 
-# Dummy dataset (replace with real CSV if you have it)
-df = pd.DataFrame({
-    "year": np.random.randint(2010, 2021, 100),
-    "mileage": np.random.uniform(10, 25, 100),
-    "max_power": np.random.uniform(50, 120, 100),
-    "selling_price": np.random.uniform(2000, 15000, 100),
-    "brand": np.random.choice(["Maruti", "Hyundai", "Toyota"], 100),
-    "fuel": np.random.choice(["Petrol", "Diesel", "CNG"], 100),
-})
+# ===== Initialize app =====
+app = Dash(__name__, external_stylesheets=[dbc.themes.CYBORG], suppress_callback_exceptions=True)
+server = app.server
 
-# Initialize app with Bootstrap theme
-app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+# ===== Load data =====
+vehicle_df = pd.read_csv("Cars.csv")           # Original dataset
+vehicle_df_graph = pd.read_csv("car_final_le.csv")  # For plotting
 
-# ===== Navbar =====
-navbar = dbc.Navbar(
-    dbc.Container([
-        dbc.NavbarBrand("🚗 Car Price Dashboard", className="ms-2 fw-bold"),
-        dbc.Nav([
-            dbc.NavItem(dbc.NavLink("Prediction", href="#prediction")),
-            dbc.NavItem(dbc.NavLink("Analytics", href="#analytics")),
-        ], className="ms-auto", navbar=True)
-    ]),
-    color="dark",
-    dark=True,
-    sticky="top",
-)
+# ===== Load models and preprocessors =====
+model = pickle.load(open("Model/a2-car-price-prediction.model", 'rb'))
+mileage_max_power_scalar = pickle.load(open("Model/a2-mileage-max-power-scalar.model", 'rb'))
+year_scalar = pickle.load(open("Model/a2-year-scalar.model", 'rb'))
+brand_encoder = pickle.load(open("Model/car-brand-encoder.pkl", 'rb'))  # OneHotEncoder
+fuel_encoder = pickle.load(open("Model/brand-fuel.model", 'rb'))       # LabelEncoder
 
-# ===== Hero Section =====
-hero = dbc.Container([
-dbc.Row([
-    dbc.Col([
-        html.H1(
-            "Welcome to the Car Price Prediction App 🚘",
-            className="display-5 fw-bold"
-        ),
-        html.P(
-            "Predict car prices, analyze trends, and visualize data with ease. "
-            "Use the sidebar to navigate between tools.",
-            className="lead"
-        ),
-    ], width=12, className="text-center")  # 👈 center the text inside column
-], className="my-4 justify-content-center"),
-], fluid=True)
+brand_cat = list(brand_encoder.categories_[0])
+fuel_cat = list(fuel_encoder.classes_)
+
+default_values = {
+    'year': 2017,
+    'max_power': 82.4,
+    'mileage': 19.42,
+    'brand': 'Maruti',
+    'fuel': 'Diesel'
+}
 
 # ===== Sidebar =====
-sidebar = dbc.Col([
-    html.H5("Navigation", className="text-center fw-bold"),
-    html.Hr(),
-    dbc.Nav(
-        [
-            dbc.NavLink("🏠 Home", href="#", active="exact"),
-            dbc.NavLink("📊 Prediction", href="#prediction", active="exact"),
-            dbc.NavLink("📈 Analytics", href="#analytics", active="exact"),
-        ],
-        vertical=True,
-        pills=True,
-    ),
-], width=2, className="bg-light vh-100 p-3")
+sidebar = dbc.Col(
+    [
+        html.H3("DASH 🚗", className="text-center"),
+        html.Hr(),
+        dbc.Nav(
+            [
+                dbc.NavLink("Home", href="/", id="page-home", active="exact"),
+                dbc.NavLink("Prediction", href="/prediction", id="page-prediction", active="exact"),
+                dbc.NavLink("Graph", href="/graph", id="page-graph", active="exact"),
+                dbc.NavLink("Contact", href="/contact", id="page-contact", active="exact"),
+            ],
+            vertical=True,
+            pills=True,
+        ),
+    ],
+    width=2,
+    style={"position": "fixed", "height": "100%", "background-color": "#222", "padding": "20px"},
+)
 
-# ===== Content (Tabs inside main area) =====
-content = dbc.Col([
-    dcc.Tabs([
+home_page = html.Div([
+    # Hero Section
+    html.Div([
+        html.H3("Welcome to Our Car Company", className="display-3"),
+        html.P("Predict car prices accurately and explore feature relationships!", className="lead"),
+    ], className="hero"),
 
-        # Prediction Tab
-        dcc.Tab(label="Prediction", id="prediction", children=[
-            dbc.Card(dbc.CardBody([
-
-                dbc.Row([
-                    dbc.Col([dbc.Label("Brand"),
-                             dcc.Dropdown(["Maruti", "Hyundai", "Toyota"], "Maruti", id="brand")], width=4),
-
-                    dbc.Col([dbc.Label("Year"),
-                             dcc.Dropdown(list(range(2010, 2021)), 2017, id="year")], width=4),
-
-                    dbc.Col([dbc.Label("Fuel"),
-                             dcc.Dropdown(["Petrol", "Diesel", "CNG"], "Diesel", id="fuel")], width=4),
-                ], className="mb-3"),
-
-                dbc.Row([
-                    dbc.Col([dbc.Label("Mileage (km/l)"),
-                             dcc.Input(id="mileage", type="number", value=18, style={"width": "100%"})], width=6),
-
-                    dbc.Col([dbc.Label("Max Power (bhp)"),
-                             dcc.Input(id="max_power", type="number", value=85, style={"width": "100%"})], width=6),
-                ], className="mb-3"),
-
-                dbc.Button("Predict Price", id="submit", color="primary", className="w-100 mb-3"),
-                html.Div(id="prediction_result", className="text-center fs-4 fw-bold")
-            ]))
-        ]),
-
-        # Analytics Tab
-        dcc.Tab(label="Analytics", id="analytics", children=[
-            dbc.Card(dbc.CardBody([
-                dbc.Row([
-                    dbc.Col([
-                        dbc.Label("Choose X-axis"),
-                        dcc.Dropdown(["year", "mileage", "max_power"], "year", id="x_axis")
-                    ], width=4),
-
-                    dbc.Col([
-                        dbc.Label("Choose Y-axis"),
-                        dcc.Dropdown(["selling_price"], "selling_price", id="y_axis")
-                    ], width=4),
-                ], className="mb-3"),
-
-                dcc.Graph(id="scatter_plot"),
-
-                html.Hr(),
-                dbc.Row([
-                    dbc.Col(dbc.Card([
-                        dbc.CardBody([
-                            html.H6("Avg Price"),
-                            html.H4(f"${df['selling_price'].mean():,.2f}")
-                        ])
-                    ], color="primary", inverse=True), width=3),
-
-                    dbc.Col(dbc.Card([
-                        dbc.CardBody([
-                            html.H6("Median Mileage"),
-                            html.H4(f"{df['mileage'].median():.1f} km/l")
-                        ])
-                    ], color="success", inverse=True), width=3),
-
-                    dbc.Col(dbc.Card([
-                        dbc.CardBody([
-                            html.H6("Avg Max Power"),
-                            html.H4(f"{df['max_power'].mean():.1f} bhp")
-                        ])
-                    ], color="info", inverse=True), width=3),
-                ], className="mt-3"),
-            ]))
-        ]),
-    ])
-], width=10)
-
-# ===== Footer =====
-footer = dbc.Container([
-    html.Hr(),
-    html.P("© 2025 Car Price Dashboard | Built with Dash + Bootstrap", className="text-center text-muted"),
-], fluid=True)
-
-# ===== App Layout =====
-app.layout = html.Div([
-    navbar,
-    hero,
-    dbc.Container([
-        dbc.Row([
-            sidebar,
-            content
-        ])
-    ], fluid=True),
-    footer
+    # Car section
+    html.Div([
+        html.Img(src="https://images.pexels.com/photos/170811/pexels-photo-170811.jpeg",
+                 className="car-image"),
+        html.Img(src="https://images.pexels.com/photos/116675/pexels-photo-116675.jpeg",
+                 className="car-image"),
+        html.Img(src="https://images.pexels.com/photos/4639907/pexels-photo-4639907.jpeg",
+                 className="car-image"),
+    ], className="car-container")
 ])
 
-# ===== Callbacks =====
-@callback(
+
+# ===== Prediction Page =====
+# ===== Prediction Page =====
+prediction_page = html.Div([
+
+    # Top Hero Section
+    html.Div([
+        html.H2("🚗 Car Price Prediction", className="text-center display-4"),
+        html.P("Enter car details below to predict the selling price.", className="text-center lead"),
+    ], className="prediction-hero", style={"padding": "40px 0", "background-color": "#60bf6c", "color": "white"}),
+
+    # Full Page Form
+    dbc.Container([
+        dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        # Row 1: Brand, Year, Fuel
+                        dbc.Row([
+                            dbc.Col([
+                                html.Label("Brand", className="form-label"),
+                                dcc.Dropdown(
+                                    id="brand",
+                                    options=[{'label': b, 'value': b} for b in brand_cat],
+                                    value=default_values['brand'],
+                                    style={"width": "100%", "margin-bottom": "15px"}
+                                )
+                            ], width=4),
+                            dbc.Col([
+                                html.Label("Year", className="form-label"),
+                                dcc.Input(
+                                    id="year", type="number",
+                                    value=default_values['year'],
+                                    style={"width": "100%", "margin-bottom": "15px", "padding": "10px"}
+                                )
+                            ], width=4),
+                            dbc.Col([
+                                html.Label("Fuel", className="form-label"),
+                                dcc.Dropdown(
+                                    id="fuel",
+                                    options=[{'label': f, 'value': f} for f in fuel_cat],
+                                    value=default_values['fuel'],
+                                    style={"width": "100%", "margin-bottom": "15px"}
+                                )
+                            ], width=4),
+                        ], className="mb-3"),
+
+                        # Row 2: Mileage, Max Power
+                        dbc.Row([
+                            dbc.Col([
+                                html.Label("Mileage", className="form-label"),
+                                dcc.Input(
+                                    id="mileage", type="number",
+                                    value=default_values['mileage'],
+                                    style={"width": "100%", "margin-bottom": "15px", "padding": "10px"}
+                                )
+                            ], width=6),
+                            dbc.Col([
+                                html.Label("Max Power", className="form-label"),
+                                dcc.Input(
+                                    id="max_power", type="number",
+                                    value=default_values['max_power'],
+                                    style={"width": "100%", "margin-bottom": "15px", "padding": "10px"}
+                                )
+                            ], width=6),
+                        ], className="mb-3"),
+
+                        # Submit button
+                        dbc.Button("Predict Price", id="submit", color="success", className="w-100 mb-3"),
+
+                        # Prediction result
+                        html.Div(id="prediction_result", className="text-center fs-4 fw-bold")
+                    ])
+                ], style={"min-height": "70vh"})  # card takes most of page height
+            ], width=12)
+        ], style={"margin-top": "20px"})
+    ], fluid=True)
+])
+
+
+
+# ===== Graph Page =====
+graph_page = html.Div([
+    dbc.Container([
+        dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H2("📊 Explore Selling Prices vs Features", className="text-center mb-3"),
+                        dbc.Label("Select Feature for X-axis:"),
+                        dcc.Dropdown(
+                            id="feature_x",
+                            options=[{'label': col, 'value': col} for col in ['year', 'mileage', 'max_power']],
+                            value='year',
+                            style={'width': '50%', 'margin-bottom': '20px'}
+                        ),
+                        dcc.Graph(id="price_vs_feature_graph", style={'height': '70vh'})
+                    ])
+                ], style={"min-height": "80vh", "background-color": "rgba(0,0,0,0.7)", "border-radius": "15px", "padding": "20px"})
+            ], width=12)  # Full width column
+        ])
+    ], fluid=True)
+])
+
+# ===== Contact Page =====
+contact_page = html.Div([
+    dbc.Container([
+        html.H2("Contact Us", className="text-center"),
+        html.P("Email: info@ourcars.com | Phone: +66936652501", className="text-center")
+    ])
+])
+
+# ===== App Layout =====
+app.layout = dbc.Container([
+    dbc.Row([
+        sidebar,
+        dbc.Col(id="page-content", width={"size":10, "offset":2})
+    ])
+], fluid=True)
+
+# ===== Page Router Callback =====
+@app.callback(
+    Output("page-content", "children"),
+    [Input("page-home", "n_clicks"),
+     Input("page-prediction", "n_clicks"),
+     Input("page-graph", "n_clicks"),
+     Input("page-contact", "n_clicks")]
+)
+def render_page(home, pred, graph, contact):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        return home_page
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    if button_id == "page-home":
+        return home_page
+    elif button_id == "page-prediction":
+        return prediction_page
+    elif button_id == "page-graph":
+        return graph_page
+    elif button_id == "page-contact":
+        return contact_page
+    return home_page
+
+# ===== Prediction Callback =====
+@app.callback(
     Output("prediction_result", "children"),
     Input("submit", "n_clicks"),
     State("year", "value"),
@@ -173,19 +227,57 @@ app.layout = html.Div([
     prevent_initial_call=True
 )
 def predict_price(n, year, max_power, brand, mileage, fuel):
-    # Dummy price formula
-    price = 5000 + (year - 2010) * 800 + max_power * 40 + mileage * 30
-    return f"💰 Predicted Price: ${price:,.2f}"
+    features = {
+        'year': year or default_values['year'],
+        'max_power': max_power or default_values['max_power'],
+        'mileage': mileage or default_values['mileage'],
+        'brand': brand or default_values['brand'],
+        'fuel': fuel or default_values['fuel']
+    }
 
-@callback(
-    Output("scatter_plot", "figure"),
-    Input("x_axis", "value"),
-    Input("y_axis", "value")
+    X = pd.DataFrame(features, index=[0])
+    X[['year']] = year_scalar.transform(X[['year']])
+    X[['max_power', 'mileage']] = mileage_max_power_scalar.transform(X[['max_power', 'mileage']])
+    brand_encoded = brand_encoder.transform(X[['brand']])
+    brand_cols = brand_encoder.get_feature_names_out(['brand'])
+    X_brand = pd.DataFrame(brand_encoded, columns=brand_cols, index=X.index)
+    X = pd.concat([X.drop(columns=['brand']), X_brand], axis=1)
+    X['fuel'] = fuel_encoder.transform(X['fuel'])
+    X.insert(0, 'intercept', 1)
+
+    price = np.round(np.exp(model.predict(X)), 2)[0]
+    return f"💰 Predicted Price: ${price}"
+
+# ===== Graph Callback =====
+@app.callback(
+    Output("price_vs_feature_graph", "figure"),
+    Input("feature_x", "value")
 )
-def update_graph(x_col, y_col):
-    fig = px.scatter(df, x=x_col, y=y_col, color="fuel", hover_data=["brand"])
+def update_graph(feature_x):
+    fig = px.scatter(vehicle_df_graph, x=feature_x, y='selling_price',
+                     color='fuel', hover_data=['brand', 'mileage', 'max_power'],
+                     title=f"Selling Price vs {feature_x}")
+   
+    fig.update_layout(
+        template='plotly_dark',          # optional, keeps dark theme
+        plot_bgcolor='rgba(28, 28, 28, 0.8)',  # plot area
+        paper_bgcolor='rgba(0, 0, 0, 0)',      # card background is already set
+        font=dict(color='white')          # axis labels & titles
+    )
+    
     return fig
 
-# Run
+# ===== Home page car sliding callback =====
+@app.callback(
+    [Output("car1", "className"),
+     Output("car2", "className"),
+     Output("car3", "className")],
+    Input("slide-btn", "n_clicks"),
+    prevent_initial_call=True
+)
+def slide_cars(n):
+    return ["car-image car-move", "car-image car-move", "car-image car-move"]
+
+# ===== Run App =====
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=8050)

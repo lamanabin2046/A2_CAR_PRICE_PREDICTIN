@@ -10,8 +10,7 @@ COPY requirements.txt .
 # Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Jupyter and Dash if not in requirements
-RUN pip install jupyter dash dash-bootstrap-components
+
 
 # Copy your source code
 COPY ./code /root/code

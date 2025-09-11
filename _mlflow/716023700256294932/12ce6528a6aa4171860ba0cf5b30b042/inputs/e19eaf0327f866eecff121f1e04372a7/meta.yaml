@@ -1,0 +1,6 @@
+destination_id: b6df1d4937c1d3f7957b86265e897ae2
+destination_type: RUN
+source_id: b6df1d4937c1d3f7957b86265e897ae2
+source_type: DATASET
+tags:
+  mlflow.data.context: training
