@@ -24,9 +24,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: dash-car:latest
+    image: nabin-dash-car:latest
     ports:
-      - "8050:8050" # Dash host port
+      - "8050:80" # Dash host port
     volumes:
       - ./code:/root/code
     command: python3 /root/code/app.py
@@ -40,4 +40,9 @@ services:
       - "5001:5000" # MLflow host port
     volumes:
       - ./_mlflow:/mlflow
-    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri /mlflow --default-artifact-root /mlflow
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri /mlflow/mlruns
+      --default-artifact-root /mlflow/mlruns

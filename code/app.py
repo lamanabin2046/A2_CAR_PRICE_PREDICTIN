@@ -1,4 +1,3 @@
-# app.py
 import dash
 from dash import Dash, html, dcc, Input, Output, State
 import dash_bootstrap_components as dbc
@@ -6,218 +5,157 @@ import pandas as pd
 import numpy as np
 import pickle
 import plotly.express as px
-from Regression import Normal  # your regression class
+from Regression import Normal
 
 # ===== Initialize app =====
 app = Dash(__name__, external_stylesheets=[dbc.themes.CYBORG], suppress_callback_exceptions=True)
 server = app.server
 
-# ===== Load data =====
-vehicle_df = pd.read_csv("Cars.csv")           # Original dataset
-vehicle_df_graph = pd.read_csv("car_final_le.csv")  # For plotting
+# ===== Load Data =====
+vehicle_df = pd.read_csv("car_final_le.csv")
 
-# ===== Load models and preprocessors =====
-model = pickle.load(open("Model/a2-car-price-prediction.model", 'rb'))
-mileage_max_power_scalar = pickle.load(open("Model/a2-mileage-max-power-scalar.model", 'rb'))
-year_scalar = pickle.load(open("Model/a2-year-scalar.model", 'rb'))
-brand_encoder = pickle.load(open("Model/car-brand-encoder.pkl", 'rb'))  # OneHotEncoder
-fuel_encoder = pickle.load(open("Model/brand-fuel.model", 'rb'))       # LabelEncoder
+# ===== Load New Model =====
+model_new = pickle.load(open("Model/a2-car-price-prediction.model", 'rb'))
+mileage_max_power_scalar_new = pickle.load(open("Model/a2-mileage-max-power-scalar.model", 'rb'))
+year_scalar_new = pickle.load(open("Model/a2-year-scalar.model", 'rb'))
+brand_encoder_new = pickle.load(open("Model/car-brand-encoder.pkl", 'rb'))
+fuel_encoder_new = pickle.load(open("Model/brand-fuel.model", 'rb'))
 
-brand_cat = list(brand_encoder.categories_[0])
-fuel_cat = list(fuel_encoder.classes_)
+brand_cat_new = list(brand_encoder_new.categories_[0])
+fuel_cat_new = list(fuel_encoder_new.classes_)
 
-default_values = {
-    'year': 2017,
-    'max_power': 82.4,
-    'mileage': 19.42,
-    'brand': 'Maruti',
-    'fuel': 'Diesel'
-}
+# ===== Load Old Model =====
+model_old = pickle.load(open("Model_old/car-prediction.model", 'rb'))
+scaler_old = pickle.load(open("Model_old/car-scalar.model", 'rb'))
+label_car_old = pickle.load(open("Model_old/brand-label.model", 'rb'))
+fuel_car_old = pickle.load(open("Model_old/brand-fuel.model", 'rb'))
 
+brand_cat_old = list(label_car_old.classes_)
+fuel_cat_old = list(fuel_car_old.classes_)
+num_cols_old = ['max_power', 'mileage']
+
+# ============================================================
 # ===== Sidebar =====
+# ============================================================
 sidebar = dbc.Col(
     [
-        html.H3("DASH 🚗", className="text-center"),
+        html.H2("🚘 CarDash", className="text-center mb-4"),
         html.Hr(),
         dbc.Nav(
             [
-                dbc.NavLink("Home", href="/", id="page-home", active="exact"),
-                dbc.NavLink("Prediction", href="/prediction", id="page-prediction", active="exact"),
-                dbc.NavLink("Graph", href="/graph", id="page-graph", active="exact"),
-                dbc.NavLink("Contact", href="/contact", id="page-contact", active="exact"),
+                dbc.NavLink([html.I(className="bi bi-speedometer2 me-2"), " Prediction"], href="/", id="link-prediction", active="exact"),
+                dbc.NavLink([html.I(className="bi bi-bar-chart-line me-2"), " Stats & Graphs"], href="/stats", id="link-stats", active="exact"),
             ],
             vertical=True,
             pills=True,
         ),
     ],
     width=2,
-    style={"position": "fixed", "height": "100%", "background-color": "#222", "padding": "20px"},
+    style={
+        "position": "fixed",
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "backgroundColor": "#1e1e1e",
+        "padding": "20px",
+        "height": "100%",
+    },
 )
 
-home_page = html.Div([
-    # Hero Section
-    html.Div([
-        html.H3("Welcome to Our Car Company", className="display-3"),
-        html.P("Predict car prices accurately and explore feature relationships!", className="lead"),
-    ], className="hero"),
+# ============================================================
+# ===== Hero Section =====
+# ============================================================
+def hero_section(title, subtitle):
+    return dbc.Container(
+        [
+            html.H1(title, className="display-4 text-center mb-2"),
+            html.P(subtitle, className="lead text-center text-muted"),
+            html.Hr(),
+        ],
+        fluid=True,
+        className="py-3",
+    )
 
-    # Car section
-    html.Div([
-        html.Img(src="https://images.pexels.com/photos/170811/pexels-photo-170811.jpeg",
-                 className="car-image"),
-        html.Img(src="https://images.pexels.com/photos/116675/pexels-photo-116675.jpeg",
-                 className="car-image"),
-        html.Img(src="https://images.pexels.com/photos/4639907/pexels-photo-4639907.jpeg",
-                 className="car-image"),
-    ], className="car-container")
-])
-
-
+# ============================================================
 # ===== Prediction Page =====
-# ===== Prediction Page =====
-prediction_page = html.Div([
+# ============================================================
+prediction_page = dbc.Container([
+    hero_section("🚗 Car Price Prediction", "Compare predictions from New vs Old models"),
 
-    # Top Hero Section
-    html.Div([
-        html.H2("🚗 Car Price Prediction", className="text-center display-4"),
-        html.P("Enter car details below to predict the selling price.", className="text-center lead"),
-    ], className="prediction-hero", style={"padding": "40px 0", "background-color": "#60bf6c", "color": "white"}),
+    dbc.Card(
+        dbc.CardBody([
+            # Inputs in 3-column rows
+            dbc.Row([
+                dbc.Col([dbc.Label("Brand"), dcc.Dropdown(id="brand", options=[{'label': b, 'value': b} for b in brand_cat_new], value=brand_cat_new[0], className="mb-3")], width=4),
+                dbc.Col([dbc.Label("Year"), dcc.Input(id="year", type="number", value=2017, className="form-control mb-3")], width=4),
+                dbc.Col([dbc.Label("Fuel"), dcc.Dropdown(id="fuel", options=[{'label': f, 'value': f} for f in fuel_cat_new], value=fuel_cat_new[0], className="mb-3")], width=4)
+            ]),
+            dbc.Row([
+                dbc.Col([dbc.Label("Mileage"), dcc.Input(id="mileage", type="number", value=19.42, className="form-control mb-3")], width=4),
+                dbc.Col([dbc.Label("Max Power"), dcc.Input(id="max_power", type="number", value=82.4, className="form-control mb-3")], width=4),
+                dbc.Col([], width=4)
+            ]),
+            dbc.Row([
+                dbc.Col([dbc.Button("Predict", id="submit", color="primary", className="w-100")], width=4)
+            ])
+        ]),
+        className="shadow-lg mb-4"
+    ),
 
-    # Full Page Form
-    dbc.Container([
-        dbc.Row([
-            dbc.Col([
-                dbc.Card([
-                    dbc.CardBody([
-                        # Row 1: Brand, Year, Fuel
-                        dbc.Row([
-                            dbc.Col([
-                                html.Label("Brand", className="form-label"),
-                                dcc.Dropdown(
-                                    id="brand",
-                                    options=[{'label': b, 'value': b} for b in brand_cat],
-                                    value=default_values['brand'],
-                                    style={"width": "100%", "margin-bottom": "15px"}
-                                )
-                            ], width=4),
-                            dbc.Col([
-                                html.Label("Year", className="form-label"),
-                                dcc.Input(
-                                    id="year", type="number",
-                                    value=default_values['year'],
-                                    style={"width": "100%", "margin-bottom": "15px", "padding": "10px"}
-                                )
-                            ], width=4),
-                            dbc.Col([
-                                html.Label("Fuel", className="form-label"),
-                                dcc.Dropdown(
-                                    id="fuel",
-                                    options=[{'label': f, 'value': f} for f in fuel_cat],
-                                    value=default_values['fuel'],
-                                    style={"width": "100%", "margin-bottom": "15px"}
-                                )
-                            ], width=4),
-                        ], className="mb-3"),
-
-                        # Row 2: Mileage, Max Power
-                        dbc.Row([
-                            dbc.Col([
-                                html.Label("Mileage", className="form-label"),
-                                dcc.Input(
-                                    id="mileage", type="number",
-                                    value=default_values['mileage'],
-                                    style={"width": "100%", "margin-bottom": "15px", "padding": "10px"}
-                                )
-                            ], width=6),
-                            dbc.Col([
-                                html.Label("Max Power", className="form-label"),
-                                dcc.Input(
-                                    id="max_power", type="number",
-                                    value=default_values['max_power'],
-                                    style={"width": "100%", "margin-bottom": "15px", "padding": "10px"}
-                                )
-                            ], width=6),
-                        ], className="mb-3"),
-
-                        # Submit button
-                        dbc.Button("Predict Price", id="submit", color="success", className="w-100 mb-3"),
-
-                        # Prediction result
-                        html.Div(id="prediction_result", className="text-center fs-4 fw-bold")
-                    ])
-                ], style={"min-height": "70vh"})  # card takes most of page height
-            ], width=12)
-        ], style={"margin-top": "20px"})
-    ], fluid=True)
-])
-
-
-
-# ===== Graph Page =====
-graph_page = html.Div([
-    dbc.Container([
-        dbc.Row([
-            dbc.Col([
-                dbc.Card([
-                    dbc.CardBody([
-                        html.H2("📊 Explore Selling Prices vs Features", className="text-center mb-3"),
-                        dbc.Label("Select Feature for X-axis:"),
-                        dcc.Dropdown(
-                            id="feature_x",
-                            options=[{'label': col, 'value': col} for col in ['year', 'mileage', 'max_power']],
-                            value='year',
-                            style={'width': '50%', 'margin-bottom': '20px'}
-                        ),
-                        dcc.Graph(id="price_vs_feature_graph", style={'height': '70vh'})
-                    ])
-                ], style={"min-height": "80vh", "background-color": "rgba(0,0,0,0.7)", "border-radius": "15px", "padding": "20px"})
-            ], width=12)  # Full width column
-        ])
-    ], fluid=True)
-])
-
-# ===== Contact Page =====
-contact_page = html.Div([
-    dbc.Container([
-        html.H2("Contact Us", className="text-center"),
-        html.P("Email: info@ourcars.com | Phone: +66936652501", className="text-center")
-    ])
-])
-
-# ===== App Layout =====
-app.layout = dbc.Container([
+    # Results cards
     dbc.Row([
-        sidebar,
-        dbc.Col(id="page-content", width={"size":10, "offset":2})
+        dbc.Col([dbc.Card(dbc.CardBody([html.H5("New Model Prediction", className="card-title"), html.Div(id="prediction_result_new", className="fs-4 fw-bold text-success")]), className="shadow-sm")], width=6),
+        dbc.Col([dbc.Card(dbc.CardBody([html.H5("Old Model Prediction", className="card-title"), html.Div(id="prediction_result_old", className="fs-4 fw-bold text-info")]), className="shadow-sm")], width=6)
     ])
 ], fluid=True)
 
-# ===== Page Router Callback =====
+# ============================================================
+# ===== Stats & Graphs Page =====
+# ============================================================
+stats_page = dbc.Container([
+    hero_section("📊 Statistics & Graphs", "Explore dataset insights"),
+
+    dbc.Row([
+        dbc.Col([dbc.Card(dbc.CardBody([html.H5("Year Distribution"), dcc.Graph(figure=px.histogram(vehicle_df, x="year", nbins=20, title="Car Year Distribution"))]), className="shadow-sm mb-3")], width=6),
+        dbc.Col([dbc.Card(dbc.CardBody([html.H5("Fuel Type Count"), dcc.Graph(figure=px.pie(vehicle_df, names="fuel", title="Fuel Type Share"))]), className="shadow-sm mb-3")], width=6),
+    ]),
+
+    dbc.Row([
+        dbc.Col([dbc.Card(dbc.CardBody([html.H5("Price vs Mileage"), dcc.Graph(figure=px.scatter(vehicle_df, x="mileage", y="selling_price", color="fuel", title="Price vs Mileage"))]), className="shadow-sm mb-3")], width=12)
+    ])
+], fluid=True)
+
+# ============================================================
+# ===== Main Layout =====
+# ============================================================
+app.layout = dbc.Container([
+    dbc.Row([
+        sidebar,
+        dbc.Col(id="page-content", width={"size": 10, "offset": 2})
+    ])
+], fluid=True)
+
+# ============================================================
+# ===== Routing =====
+# ============================================================
 @app.callback(
     Output("page-content", "children"),
-    [Input("page-home", "n_clicks"),
-     Input("page-prediction", "n_clicks"),
-     Input("page-graph", "n_clicks"),
-     Input("page-contact", "n_clicks")]
+    [Input("link-prediction", "n_clicks"), Input("link-stats", "n_clicks")]
 )
-def render_page(home, pred, graph, contact):
+def render_page(pred_click, stats_click):
     ctx = dash.callback_context
     if not ctx.triggered:
-        return home_page
-    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-    if button_id == "page-home":
-        return home_page
-    elif button_id == "page-prediction":
         return prediction_page
-    elif button_id == "page-graph":
-        return graph_page
-    elif button_id == "page-contact":
-        return contact_page
-    return home_page
+    button_id = ctx.triggered[0]["prop_id"].split(".")[0]
+    if button_id == "link-stats":
+        return stats_page
+    return prediction_page
 
+# ============================================================
 # ===== Prediction Callback =====
+# ============================================================
 @app.callback(
-    Output("prediction_result", "children"),
+    [Output("prediction_result_new", "children"), Output("prediction_result_old", "children")],
     Input("submit", "n_clicks"),
     State("year", "value"),
     State("max_power", "value"),
@@ -226,58 +164,29 @@ def render_page(home, pred, graph, contact):
     State("fuel", "value"),
     prevent_initial_call=True
 )
-def predict_price(n, year, max_power, brand, mileage, fuel):
-    features = {
-        'year': year or default_values['year'],
-        'max_power': max_power or default_values['max_power'],
-        'mileage': mileage or default_values['mileage'],
-        'brand': brand or default_values['brand'],
-        'fuel': fuel or default_values['fuel']
-    }
+def predict_both_models(n, year, max_power, brand, mileage, fuel):
+    # New model
+    X_new = pd.DataFrame({'year':[year], 'max_power':[max_power], 'mileage':[mileage], 'brand':[brand], 'fuel':[fuel]})
+    X_new[['year']] = year_scalar_new.transform(X_new[['year']])
+    X_new[['max_power','mileage']] = mileage_max_power_scalar_new.transform(X_new[['max_power','mileage']])
+    brand_enc = brand_encoder_new.transform(X_new[['brand']])
+    brand_cols = brand_encoder_new.get_feature_names_out(['brand'])
+    X_brand = pd.DataFrame(brand_enc, columns=brand_cols, index=X_new.index)
+    X_new = pd.concat([X_new.drop(columns=['brand']), X_brand], axis=1)
+    X_new['fuel'] = fuel_encoder_new.transform(X_new['fuel'])
+    X_new.insert(0,'intercept',1)
+    new_price = np.round(np.exp(model_new.predict(X_new)),2)[0]
 
-    X = pd.DataFrame(features, index=[0])
-    X[['year']] = year_scalar.transform(X[['year']])
-    X[['max_power', 'mileage']] = mileage_max_power_scalar.transform(X[['max_power', 'mileage']])
-    brand_encoded = brand_encoder.transform(X[['brand']])
-    brand_cols = brand_encoder.get_feature_names_out(['brand'])
-    X_brand = pd.DataFrame(brand_encoded, columns=brand_cols, index=X.index)
-    X = pd.concat([X.drop(columns=['brand']), X_brand], axis=1)
-    X['fuel'] = fuel_encoder.transform(X['fuel'])
-    X.insert(0, 'intercept', 1)
+    # Old model
+    X_old = pd.DataFrame({'year':[year], 'max_power':[max_power], 'mileage':[mileage], 'brand':[brand], 'fuel':[fuel]})
+    X_old[num_cols_old] = scaler_old.transform(X_old[num_cols_old])
+    X_old['brand'] = label_car_old.transform(X_old['brand'])
+    X_old['fuel'] = fuel_car_old.transform(X_old['fuel'])
+    X_old = X_old[model_old.feature_names_in_]
+    old_price = np.round(np.exp(model_old.predict(X_old)),2)[0]
 
-    price = np.round(np.exp(model.predict(X)), 2)[0]
-    return f"💰 Predicted Price: ${price}"
-
-# ===== Graph Callback =====
-@app.callback(
-    Output("price_vs_feature_graph", "figure"),
-    Input("feature_x", "value")
-)
-def update_graph(feature_x):
-    fig = px.scatter(vehicle_df_graph, x=feature_x, y='selling_price',
-                     color='fuel', hover_data=['brand', 'mileage', 'max_power'],
-                     title=f"Selling Price vs {feature_x}")
-   
-    fig.update_layout(
-        template='plotly_dark',          # optional, keeps dark theme
-        plot_bgcolor='rgba(28, 28, 28, 0.8)',  # plot area
-        paper_bgcolor='rgba(0, 0, 0, 0)',      # card background is already set
-        font=dict(color='white')          # axis labels & titles
-    )
-    
-    return fig
-
-# ===== Home page car sliding callback =====
-@app.callback(
-    [Output("car1", "className"),
-     Output("car2", "className"),
-     Output("car3", "className")],
-    Input("slide-btn", "n_clicks"),
-    prevent_initial_call=True
-)
-def slide_cars(n):
-    return ["car-image car-move", "car-image car-move", "car-image car-move"]
+    return f"💰 New Model Price: Rs.{new_price}", f"💰 Old Model Price: Rs.{old_price}"
 
 # ===== Run App =====
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=8050)
+    app.run(debug=True, host="0.0.0.0", port=80)
